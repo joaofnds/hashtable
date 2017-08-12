@@ -1,16 +1,45 @@
 #include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 #define TABLE_SIZE 100
 #define WORD_SIZE 100
+const char TYPOS[27][9] = {
+    "qwszx",     // a
+    "ghvn",      // b
+    "dfxv",      // c
+    "wersfxcv",  // d
+    "wrsdf",     // e
+    "ertdgcvb",  // f
+    "rtyfhvbn",  // g
+    "tyugjbnm",  // h
+    "uojkl",     // i
+    "yuihknm",   // j
+    "uiojlm",    // k
+    "iopkç",     // l
+    "jkn",       // m
+    "hjbm",      // n
+    "ipklç",     // o
+    "olç",       // p
+    "wsa",       // q
+    "etdfg",     // r
+    "qweadzxc",  // s
+    "ryfgh",     // t
+    "yihjk",     // u
+    "fgcb",      // v
+    "qeasd",     // w
+    "asdzc",     // x
+    "tughj",     // y
+    "asx",       // z
+    "opl",       // ç
+};
 
 struct node {
-  char *key;
-  int value;
+  char *key;    // word (i.e: hosue)
+  char *value;  // reference word (i.e: house)
   struct node *next;
 };
 
@@ -25,34 +54,34 @@ struct hashtable {
 };
 
 unsigned long hash(char *str);
-struct node *node__create(char *key, int value);
+struct node *node__create(char *key, char *value);
 int node__destroy(struct node *target);
 struct linked_list *linked_list__init();
-struct linked_list *linked_list__init_with_keyval(char *key, int value);
-int linked_list__insert(struct linked_list *list, char *key, int value);
+struct linked_list *linked_list__init_with_keyval(char *key, char *value);
+int linked_list__insert(struct linked_list *list, char *key, char *value);
 struct node *linked_list__delete(struct linked_list *list, char *key);
 struct node *linked_list__find(struct linked_list *list, char *key);
 void *linked_list__destroy(struct linked_list *list);
 struct hashtable *hashtable__init(int table_size);
 int hashtable__destroy(struct hashtable *hashtable);
 struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
-                                    int value);
+                                    char *value);
 struct node *hashtable__find(struct hashtable *hashtable, char *key);
 struct node *hashtable__delete(struct hashtable *hashtable, char *key);
+struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key);
+void swap_chars(char *chars, int first, int second);
 
 int main(int argc, char **argv) {
   struct hashtable *hashtable = hashtable__init(TABLE_SIZE);
 
   assert(hashtable != NULL);
 
-  int value = 0;
   char command[WORD_SIZE];
   char last_word[WORD_SIZE];
   struct node *query_result = NULL;
   bool has_last_word = false;
 
   while (scanf(" %[^\n]s", command) == 1) {
-
     switch (command[0]) {
       case '+':
         query_result = hashtable__find(hashtable, last_word);
@@ -62,9 +91,8 @@ int main(int argc, char **argv) {
             printf("fail\n");
             break;
           }
-          hashtable = hashtable__insert(hashtable, last_word, value);
+          spellchecker__insert(hashtable, last_word);
           assert(hashtable != NULL);
-          value += 1;
           printf("ok\n");
         } else {
           printf("fail\n");
@@ -72,10 +100,12 @@ int main(int argc, char **argv) {
         break;
       case '-':
         query_result = hashtable__delete(hashtable, last_word);
-        if (query_result == NULL)
+        if (query_result == NULL) {
           printf("fail\n");
-        else
+        } else {
+          free(query_result);
           printf("ok\n");
+        }
         break;
       case '*':  // end program
         return 0;
@@ -85,7 +115,6 @@ int main(int argc, char **argv) {
         query_result = hashtable__find(hashtable, command);
 
         if (query_result != NULL)
-          // printf("'%s': '%d'\n", query_result->key, query_result->value);
           printf("ok\n");
         else
           printf("not found\n");
@@ -113,20 +142,21 @@ unsigned long hash(char *str) {
   return hash % TABLE_SIZE;
 }
 
-struct node *node__create(char *key, int value) {
+struct node *node__create(char *key, char *value) {
   if (key == NULL) return NULL;
 
   struct node *newItem = (struct node *)malloc(sizeof(struct node));
 
   if (newItem == NULL) {
-    printf("FAILED TO CREATE NEW NODE {%s: %d}\n", key, value);
+    printf("FAILED TO CREATE NEW NODE {%s: %s}\n", key, value);
   }
 
   newItem->key = (char *)calloc(strlen(key) + 1, sizeof(char));
-  newItem->value = value;
+  newItem->value = (char *)calloc(strlen(value) + 1, sizeof(char));
   newItem->next = NULL;
 
   strcpy(newItem->key, key);
+  strcpy(newItem->value, value);
 
   return newItem;
 }
@@ -134,11 +164,12 @@ struct node *node__create(char *key, int value) {
 int node__destroy(struct node *target) {
   if (target == NULL) return 0;
   free(target->key);
+  free(target->value);
   free(target);
   return 0;
 }
 
-int linked_list__insert(struct linked_list *list, char *key, int value) {
+int linked_list__insert(struct linked_list *list, char *key, char *value) {
   if (list == NULL || key == NULL) return -1;
 
   struct node **target = &list->head;
@@ -153,8 +184,8 @@ int linked_list__insert(struct linked_list *list, char *key, int value) {
   *target = node__create(key, value);
 
   if (*target == NULL) {
-    printf("[linked_list__insert] FAILED TO CREATE NODE {\"%s\": \"%d\"\n", key,
-           value);
+    printf("[linked_list__insert] FAILED TO CREATE NODE {\"%s\": \"%s\"}\n",
+           key, value);
     return -1;
   }
 
@@ -168,8 +199,7 @@ struct node *linked_list__delete(struct linked_list *list, char *key) {
 
   struct node **target = &(list->head);
 
-  while (*target && strcmp((*target)->key, key) != 0 )
-    target = &(*target)->next;
+  while (*target && strcmp((*target)->key, key) != 0) target = &(*target)->next;
 
   if (*target == NULL) return NULL;
 
@@ -226,7 +256,7 @@ struct linked_list *linked_list__init() {
   return newList;
 }
 
-struct linked_list *linked_list__init_with_keyval(char *key, int value) {
+struct linked_list *linked_list__init_with_keyval(char *key, char *value) {
   struct linked_list *newList = linked_list__init();
 
   struct node *firstNode = node__create(key, value);
@@ -264,7 +294,7 @@ int hashtable__destroy(struct hashtable *hashtable) {
 }
 
 struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
-                                    int value) {
+                                    char *value) {
   unsigned long index = hash(key);
 
   if (hashtable->hashtable[index] == NULL) {
@@ -272,11 +302,12 @@ struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
   }
 
   if (hashtable->hashtable[index] == NULL) {
-    printf("FAILED TO CREATE LINKED LIST AT INDEX \"%d\"\n", value);
+    printf("[hashtable__insert] FAILED TO CREATE LINKED LIST AT INDEX \"%s\"\n",
+           value);
     return hashtable;
   }
 
-  linked_list__insert(hashtable->hashtable[index], key, value++);
+  linked_list__insert(hashtable->hashtable[index], key, value);
 
   return hashtable;
 }
@@ -294,4 +325,61 @@ struct node *hashtable__find(struct hashtable *hashtable, char *key) {
 struct node *hashtable__delete(struct hashtable *hashtable, char *key) {
   unsigned long index = hash(key);
   return linked_list__delete(hashtable->hashtable[index], key);
+}
+
+struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key) {
+  int keyLength = strlen(key);
+  char *originalKey = (char *)calloc(keyLength, sizeof(char));
+
+  originalKey = strcpy(originalKey, key);
+
+  hashtable__insert(hashtable, key, key);
+
+  for (int i = 0; i < keyLength - 1; i++) {  // Swaped chars
+    swap_chars(key, i, i + 1);
+    hashtable__insert(hashtable, key, originalKey);
+    swap_chars(key, i, i + 1);
+  }
+
+  for (int i = 0; i < keyLength; i++) {  // Duplicate char
+    memmove(&key[i + 1], &key[i], keyLength - i * sizeof(char));
+    key[i] = key[i + 1];
+    hashtable__insert(hashtable, key, originalKey);
+    strcpy(key, originalKey);
+  }
+
+  for (int i = 0; i < keyLength; i++) {  // Char missing
+    memmove(&key[i], &key[i + 1], keyLength - i * sizeof(char));
+    hashtable__insert(hashtable, key, originalKey);
+    strcpy(key, originalKey);
+  }
+
+  char * typos = (char *) calloc(9, sizeof(char)); // TODO: try to get directly from TYPOS
+  char originalChar;
+  for (int i = 0; i < keyLength; i++) {  // Typos
+    strcpy(typos, TYPOS[key[i] - 'a']);
+    originalChar = key[i];
+
+    for (char * c = typos; *c != '\0'; c++) {
+      key[i] = *c;
+      hashtable__insert(hashtable, key, originalKey);
+    }
+
+    key[i] = originalChar;
+  }
+  
+  free(typos);
+  free(originalKey);
+
+  return NULL;
+}
+
+void swap_chars(char *chars, int first, int second) {
+  if (chars == NULL || first < 0 || second < 0) return;
+
+  char current = chars[first];
+  chars[first] = chars[second];
+  chars[second] = current;
+
+  return;
 }
