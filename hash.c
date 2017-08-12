@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TABLE_SIZE 100
+#define TABLE_SIZE 50000
 #define WORD_SIZE 100
 const char TYPOS[27][9] = {
     "qwszx",     // a
@@ -76,8 +76,8 @@ int main(int argc, char **argv) {
 
   assert(hashtable != NULL);
 
-  char command[WORD_SIZE];
-  char last_word[WORD_SIZE];
+  char *command = calloc(WORD_SIZE, sizeof(char));
+  char *last_word = calloc(WORD_SIZE, sizeof(char));
   struct node *query_result = NULL;
   bool has_last_word = false;
 
@@ -103,11 +103,15 @@ int main(int argc, char **argv) {
         if (query_result == NULL) {
           printf("fail\n");
         } else {
-          free(query_result);
+          node__destroy(query_result);
           printf("ok\n");
         }
         break;
-      case '*':  // end program
+      case '*':  // Free everything, end program
+        hashtable__destroy(hashtable);
+        free(hashtable);
+        free(command);
+        free(last_word);
         return 0;
       default:  // check word exiseance
         assert(isalpha(command[0]));
@@ -115,7 +119,7 @@ int main(int argc, char **argv) {
         query_result = hashtable__find(hashtable, command);
 
         if (query_result != NULL)
-          printf("ok\n");
+          printf("%s\n", query_result->value);
         else
           printf("not found\n");
 
@@ -129,6 +133,8 @@ int main(int argc, char **argv) {
   // Free everything
   hashtable__destroy(hashtable);
   free(hashtable);
+  free(command);
+  // free(last_word);
 
   return 0;
 }
@@ -143,16 +149,15 @@ unsigned long hash(char *str) {
 }
 
 struct node *node__create(char *key, char *value) {
-  if (key == NULL) return NULL;
+  assert(key != NULL);
+  assert(value != NULL);
 
-  struct node *newItem = (struct node *)malloc(sizeof(struct node));
+  struct node *newItem = malloc(sizeof(struct node));
 
-  if (newItem == NULL) {
-    printf("FAILED TO CREATE NEW NODE {%s: %s}\n", key, value);
-  }
+  assert(newItem != NULL);
 
-  newItem->key = (char *)calloc(strlen(key) + 1, sizeof(char));
-  newItem->value = (char *)calloc(strlen(value) + 1, sizeof(char));
+  newItem->key = calloc(strlen(key) + 1, sizeof(char));
+  newItem->value = calloc(strlen(value) + 1, sizeof(char));
   newItem->next = NULL;
 
   strcpy(newItem->key, key);
@@ -170,12 +175,14 @@ int node__destroy(struct node *target) {
 }
 
 int linked_list__insert(struct linked_list *list, char *key, char *value) {
-  if (list == NULL || key == NULL) return -1;
+  assert(list != NULL);
+  assert(key != NULL);
+  assert(value != NULL);
 
   struct node **target = &list->head;
 
   while (*target != NULL) {
-    if (strcmp((*target)->key, key) == 0) {
+    if (strcmp((*target)->key, key) == 0) { // If an equal key already is on the list
       return 0;
     }
     target = &(*target)->next;
@@ -183,11 +190,7 @@ int linked_list__insert(struct linked_list *list, char *key, char *value) {
 
   *target = node__create(key, value);
 
-  if (*target == NULL) {
-    printf("[linked_list__insert] FAILED TO CREATE NODE {\"%s\": \"%s\"}\n",
-           key, value);
-    return -1;
-  }
+  assert (*target != NULL);
 
   list->length++;
 
@@ -211,7 +214,8 @@ struct node *linked_list__delete(struct linked_list *list, char *key) {
 }
 
 struct node *linked_list__find(struct linked_list *list, char *key) {
-  if (list == NULL || key == NULL) return NULL;
+  assert(list != NULL);
+  assert(key != NULL);
 
   struct node **target = &list->head;
 
@@ -246,10 +250,9 @@ void *linked_list__destroy(struct linked_list *list) {
 }
 
 struct linked_list *linked_list__init() {
-  struct linked_list *newList =
-      (struct linked_list *)malloc(sizeof(struct linked_list));
+  struct linked_list *newList = malloc(sizeof(struct linked_list));
 
-  if (newList == NULL) return NULL;
+  assert(newList != NULL);
 
   newList->length = 0;
   newList->head = NULL;
@@ -266,15 +269,13 @@ struct linked_list *linked_list__init_with_keyval(char *key, char *value) {
 }
 
 struct hashtable *hashtable__init(int table_size) {
-  struct hashtable *new_hashtable =
-      (struct hashtable *)malloc(sizeof(struct hashtable));
+  struct hashtable *new_hashtable = malloc(sizeof(struct hashtable));
 
   if (new_hashtable == NULL) {
     return NULL;
   }
 
-  new_hashtable->hashtable =
-      (struct linked_list **)calloc(TABLE_SIZE, sizeof(struct linked_list *));
+  new_hashtable->hashtable = calloc(TABLE_SIZE, sizeof(struct linked_list *));
 
   new_hashtable->table_size = table_size;
 
@@ -282,8 +283,8 @@ struct hashtable *hashtable__init(int table_size) {
 }
 
 int hashtable__destroy(struct hashtable *hashtable) {
-  if (hashtable == NULL) return 0;
-
+  assert(hashtable != NULL);
+  
   for (int i = 0; i < hashtable->table_size; i++) {
     linked_list__destroy(hashtable->hashtable[i]);
   }
@@ -301,11 +302,7 @@ struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
     hashtable->hashtable[index] = linked_list__init();
   }
 
-  if (hashtable->hashtable[index] == NULL) {
-    printf("[hashtable__insert] FAILED TO CREATE LINKED LIST AT INDEX \"%s\"\n",
-           value);
-    return hashtable;
-  }
+  assert(hashtable->hashtable[index] != NULL);
 
   linked_list__insert(hashtable->hashtable[index], key, value);
 
@@ -313,6 +310,10 @@ struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
 }
 
 struct node *hashtable__find(struct hashtable *hashtable, char *key) {
+  assert(hashtable != NULL);
+  assert(hashtable->hashtable != NULL);
+  assert(key != NULL);
+
   unsigned long index = hash(key);
 
   if (hashtable->hashtable[index] == NULL) {
@@ -323,13 +324,21 @@ struct node *hashtable__find(struct hashtable *hashtable, char *key) {
 }
 
 struct node *hashtable__delete(struct hashtable *hashtable, char *key) {
+  assert(hashtable != NULL);
+  assert(key != NULL);
+
   unsigned long index = hash(key);
   return linked_list__delete(hashtable->hashtable[index], key);
 }
 
 struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key) {
+  assert(hashtable != NULL);
+  assert(key != NULL);
+  
   int keyLength = strlen(key);
-  char *originalKey = (char *)calloc(keyLength, sizeof(char));
+  char *originalKey = calloc(keyLength + 1, sizeof(char));
+
+  assert(originalKey != NULL);
 
   originalKey = strcpy(originalKey, key);
 
@@ -354,21 +363,20 @@ struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key) {
     strcpy(key, originalKey);
   }
 
-  char * typos = (char *) calloc(9, sizeof(char)); // TODO: try to get directly from TYPOS
   char originalChar;
   for (int i = 0; i < keyLength; i++) {  // Typos
-    strcpy(typos, TYPOS[key[i] - 'a']);
     originalChar = key[i];
 
-    for (char * c = typos; *c != '\0'; c++) {
-      key[i] = *c;
+    char c = TYPOS[originalChar - 'a'][0];
+    for (int j = 1; c != '\0'; j++) {
+      key[i] = c;
       hashtable__insert(hashtable, key, originalKey);
+      c = (TYPOS[originalChar - 'a'])[j];
     }
 
     key[i] = originalChar;
   }
-  
-  free(typos);
+
   free(originalKey);
 
   return NULL;
