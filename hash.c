@@ -69,6 +69,7 @@ struct hashtable *hashtable__insert(struct hashtable *hashtable, char *key,
 struct node *hashtable__find(struct hashtable *hashtable, char *key);
 struct node *hashtable__delete(struct hashtable *hashtable, char *key);
 struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key);
+bool spellchecker__delete(struct hashtable *hashtable, char *key);
 void swap_chars(char *chars, int first, int second);
 
 int main(int argc, char **argv) {
@@ -99,12 +100,10 @@ int main(int argc, char **argv) {
         }
         break;
       case '-':
-        query_result = hashtable__delete(hashtable, last_word);
-        if (query_result == NULL) {
-          printf("fail\n");
-        } else {
-          node__destroy(query_result);
+        if (spellchecker__delete(hashtable, last_word)) {
           printf("ok\n");
+        } else {
+          printf("fail\n");
         }
         break;
       case '*':  // Free everything, end program
@@ -380,6 +379,62 @@ struct hashtable *spellchecker__insert(struct hashtable *hashtable, char *key) {
   free(originalKey);
 
   return NULL;
+}
+
+bool spellchecker__delete(struct hashtable *hashtable, char *key) {
+  assert(hashtable != NULL);
+  assert(key != NULL);
+
+  struct node *query_result = hashtable__delete(hashtable, key);
+  if (query_result == NULL) {
+    return false;
+  } else {
+    node__destroy(query_result);
+  }
+  
+  int keyLength = strlen(key);
+  char *originalKey = calloc(keyLength + 1, sizeof(char));
+
+  assert(originalKey != NULL);
+
+  originalKey = strcpy(originalKey, key);
+
+  for (int i = 0; i < keyLength - 1; i++) {  // Swaped chars
+    swap_chars(key, i, i + 1);
+    node__destroy(hashtable__delete(hashtable, key));
+    swap_chars(key, i, i + 1);
+  }
+
+  for (int i = 0; i < keyLength; i++) {  // Duplicate char
+    memmove(&key[i + 1], &key[i], keyLength - i * sizeof(char));
+    key[i] = key[i + 1];
+    node__destroy(hashtable__delete(hashtable, key));
+    strcpy(key, originalKey); // TODO: try to just move it back
+  }
+
+  for (int i = 0; i < keyLength; i++) {  // Char missing
+    memmove(&key[i], &key[i + 1], keyLength - i * sizeof(char));
+    node__destroy(hashtable__delete(hashtable, key));
+    strcpy(key, originalKey);
+  }
+
+  char originalChar;
+  for (int i = 0; i < keyLength; i++) {  // Typos
+    originalChar = key[i];
+
+    char c = TYPOS[originalChar - 'a'][0];
+    for (int j = 1; c != '\0'; j++) {
+      key[i] = c;
+      node__destroy(hashtable__delete(hashtable, key));
+      c = (TYPOS[originalChar - 'a'])[j];
+    }
+
+    key[i] = originalChar;
+  }
+
+  free(originalKey);
+
+  return true;
 }
 
 void swap_chars(char *chars, int first, int second) {
